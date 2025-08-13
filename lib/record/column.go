@@ -618,3 +618,19 @@ func (cv *ColVal) RepairBitmap() {
 		}
 	}
 }
+
+func (cv *ColVal) AppendNull(isString bool) {
+	appendNull(cv)
+	if isString {
+		cv.Offset = append(cv.Offset, uint32(len(cv.Val)))
+	}
+}
+
+func (cv *ColVal) AppendValue(v []byte, isString bool) {
+	cv.Val = append(cv.Val, v...)
+	if isString {
+		cv.Offset = append(cv.Offset, uint32(len(cv.Val)-len(v)))
+	}
+	cv.setBitMap(cv.Len)
+	cv.Len++
+}

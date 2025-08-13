@@ -15,10 +15,13 @@
 package recover
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/openGemini/openGemini/engine"
+	"github.com/openGemini/openGemini/lib/backup"
 	"github.com/openGemini/openGemini/lib/config"
 	"github.com/openGemini/openGemini/lib/fileops"
 	"github.com/stretchr/testify/assert"
@@ -73,13 +76,13 @@ func TestRecoverMeta(t *testing.T) {
 	t.Run("isInc=true", func(t *testing.T) {
 		content := `{"metaIds":["1"],"isNode":true}`
 		CreateFile("/tmp/openGemini/backup_dir/backup_inc/meta_backup/backup_log/meta_backup_log.json", content)
-		recoverMeta(tsRecover, recoverConfig, true)
+		recoverMeta(tsRecover, recoverConfig, true, nil)
 	})
 
 	t.Run("isInc=false", func(t *testing.T) {
 		content := `{"metaIds":["1","2"],"isNode":false}`
 		CreateFile("/tmp/openGemini/backup_dir/backup/meta_backup/backup_log/meta_backup_log.json", content)
-		recoverMeta(tsRecover, recoverConfig, false)
+		recoverMeta(tsRecover, recoverConfig, false, nil)
 	})
 
 	os.RemoveAll("/tmp/openGemini/backup_dir")
@@ -101,19 +104,73 @@ func TestRecoverError(t *testing.T) {
 		},
 	}
 
+	result := engine.BackupResult{Result: "success"}
+	b, _ := json.Marshal(result)
+	_ = backup.WriteBackupLogFile(b, fullBackupPath, backup.ResultLog)
+	_ = backup.WriteBackupLogFile(b, incBackupPath, backup.ResultLog)
+
 	t.Run("1", func(t *testing.T) {
-		err := recoverWithFull(tsRecover, recoverConfig)
-		if err != nil {
+		err := runRecover(tsRecover, recoverConfig, false)
+		if err == nil {
 			t.Fail()
 		}
 	})
 
 	t.Run("2", func(t *testing.T) {
-		err := recoverWithFullAndInc(tsRecover, recoverConfig)
-		if err != nil {
+		err := runRecover(tsRecover, recoverConfig, true)
+		if err == nil {
 			t.Fail()
 		}
 	})
+
+	os.RemoveAll(fullBackupPath)
+	os.RemoveAll(incBackupPath)
+}
+
+func TestRecoverError2(t *testing.T) {
+	fullBackupPath := "/tmp/openGemini/backup_dir/backup_full"
+	incBackupPath := "/tmp/openGemini/backup_dir/backup_inc"
+	recoverConfig := &RecoverConfig{
+		RecoverMode:        "2",
+		FullBackupDataPath: fullBackupPath,
+		IncBackupDataPath:  incBackupPath,
+		Host:               "127.0.0.1",
+		Port:               "8091",
+		SSL:                true,
+		InsecureTLS:        true,
+	}
+	tsRecover := &config.TsRecover{
+		Data: config.Store{
+			DataDir: "/tmp/openGemini/backup_dir/data",
+			MetaDir: "/tmp/openGemini/backup_dir/meta",
+		},
+	}
+	t.Run("1", func(t *testing.T) {
+		err := runRecover(tsRecover, recoverConfig, false)
+		if err == nil {
+			t.Fatal()
+		}
+	})
+	t.Run("2", func(t *testing.T) {
+		err := runRecover(tsRecover, recoverConfig, true)
+		if err == nil {
+			t.Fatal()
+		}
+	})
+	t.Run("3", func(t *testing.T) {
+		result := engine.BackupResult{Result: "success", DataBases: map[string]struct{}{"prom": {}}}
+		b, _ := json.Marshal(result)
+		_ = backup.WriteBackupLogFile(b, fullBackupPath, backup.ResultLog)
+		_ = backup.WriteBackupLogFile(b, incBackupPath, backup.ResultLog)
+		os.MkdirAll(filepath.Join(fullBackupPath, backup.DataBackupDir, tsRecover.Data.DataDir, config.DataDirectory), 0700)
+		err := runRecover(tsRecover, recoverConfig, false)
+		os.RemoveAll(fullBackupPath)
+		os.RemoveAll(incBackupPath)
+		if err == nil {
+			t.Fail()
+		}
+	})
+
 }
 
 func Test_TraversalBackupLogFile_Error(t *testing.T) {
@@ -186,9 +243,52 @@ func Test_MergeFileList(t *testing.T) {
 
 }
 
+func TestRecoverData(t *testing.T) {
+	fullBackupPath := "/tmp/openGemini/backup_dir/backup_full"
+	incBackupPath := "/tmp/openGemini/backup_dir/backup_inc"
+
+	recoverConfig := &RecoverConfig{
+		RecoverMode:        "2",
+		FullBackupDataPath: fullBackupPath,
+		IncBackupDataPath:  incBackupPath,
+		Host:               "127.0.0.1",
+		Port:               "8091",
+	}
+	tsRecover := &config.TsRecover{
+		Data: config.Store{
+			DataDir: "/tmp/openGemini/data",
+			MetaDir: "/tmp/openGemini/meta",
+		},
+	}
+
+	result := engine.BackupResult{Result: "success", DataBases: map[string]struct{}{"prom": {}}}
+	b, _ := json.Marshal(result)
+	_ = backup.WriteBackupLogFile(b, fullBackupPath, backup.ResultLog)
+	_ = backup.WriteBackupLogFile(b, incBackupPath, backup.ResultLog)
+	dataPath := filepath.Join(fullBackupPath, backup.DataBackupDir, tsRecover.Data.DataDir, config.DataDirectory)
+	_ = os.MkdirAll(dataPath, 0700)
+
+	t.Run("1", func(t *testing.T) {
+		err := recoverData(tsRecover, recoverConfig, []string{"prom"}, false)
+		if err != nil {
+			t.Fail()
+		}
+	})
+
+	t.Run("2", func(t *testing.T) {
+		err := recoverData(tsRecover, recoverConfig, []string{"prom"}, true)
+		if err != nil {
+			t.Fail()
+		}
+	})
+
+	os.RemoveAll(fullBackupPath)
+	os.RemoveAll(incBackupPath)
+}
+
 func CreateFile(path, content string) {
 	p, _ := filepath.Split(path)
-	_ = os.MkdirAll(p, 0750)
+	_ = os.MkdirAll(p, 0700)
 	fd, _ := fileops.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0640)
 	fd.Write([]byte(content))
 	fd.Close()

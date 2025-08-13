@@ -1137,6 +1137,7 @@ func (req *VerifyDataNodeStatusRequest) Instance() transport.Codec {
 func (resp *VerifyDataNodeStatusResponse) Marshal(buf []byte) ([]byte, error) {
 	var err error
 	buf = codec.AppendString(buf, resp.Err)
+	buf = codec.AppendUint16(buf, uint16(resp.ErrCode))
 
 	return buf, err
 }
@@ -1148,6 +1149,7 @@ func (resp *VerifyDataNodeStatusResponse) Unmarshal(buf []byte) error {
 
 	dec := codec.NewBinaryDecoder(buf)
 	resp.Err = dec.String()
+	resp.ErrCode = errno.Errno(dec.Uint16())
 	return nil
 }
 

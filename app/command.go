@@ -159,7 +159,7 @@ func Run(args []string, commands ...*Command) {
 		return
 	}
 
-	stat.SetVersion(commands[0].Info.StatVersion())
+	stat.RuntimeIns().SetVersion(commands[0].Info.StatVersion())
 	name, args := cmd.ParseCommandName(args)
 
 	// Extract name from args.

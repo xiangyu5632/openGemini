@@ -452,3 +452,16 @@ func Test_ShowCluster(t *testing.T) {
 	msg1 := message.NewMetaMessage(message.SnapshotV2RequestMessage, &message.SnapshotV2Request{})
 	require.Error(t, h.SetRequestMsg(msg1.Data()))
 }
+
+func Test_doHandleRsp(t *testing.T) {
+	err := errno.NewError(errno.PtNotFound, "mock error")
+	rsp := &message.VerifyDataNodeStatusResponse{
+		ErrCode: errno.PtNotFound,
+	}
+
+	DoHandleRsp(rsp, err)
+
+	var er error
+	assert.NoError(t, er)
+
+}

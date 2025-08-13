@@ -22,6 +22,7 @@ import (
 	"github.com/openGemini/openGemini/engine/executor"
 	"github.com/openGemini/openGemini/engine/hybridqp"
 	"github.com/openGemini/openGemini/engine/immutable"
+	"github.com/openGemini/openGemini/engine/immutable/colstore"
 	"github.com/openGemini/openGemini/lib/binaryfilterfunc"
 	"github.com/openGemini/openGemini/lib/bitmap"
 	"github.com/openGemini/openGemini/lib/config"
@@ -244,7 +245,7 @@ func (r *ColumnStoreReader) initReadCursor(queryCtx context.Context) (err error)
 			if ok {
 				loc.SetChunkMeta(chunkMeta)
 			} else {
-				ok, err = loc.Contains(0, tr, ctx)
+				ok, err = loc.Contains(colstore.SeriesID, tr, ctx)
 				if err != nil {
 					return
 				}
@@ -319,7 +320,7 @@ func (r *ColumnStoreReader) initSchemaAndPool() (err error) {
 	recordNum := ColumnStoreReaderRecordNum
 	chunkNum := ColumnStoreReaderChunkNum
 	// init the data record pool
-	if r.schema.HasTopNDDCM() {
+	if _, ok := r.schema.HasTopN(); ok {
 		recordNum = ColumnStoreReaderNoCopyRecordNum
 		chunkNum = ColumnStoreReaderNoCopyChunkNum
 	}

@@ -372,6 +372,17 @@ func TestTimeTask_filterRowsByExprTestTimeTask_filterRowsByExpr(t *testing.T) {
 				Type:     influx.Field_Type_Float,
 			})
 		}
+		var boolNum float64
+		if j%2 == 0 {
+			boolNum = 0
+		} else {
+			boolNum = 1
+		}
+		r.Fields = append(r.Fields, influx.Field{
+			Key:      "fieldb",
+			NumValue: boolNum,
+			Type:     influx.Field_Type_Boolean,
+		})
 		sort.Stable(&r.Fields)
 		rs = append(rs, *r)
 	}
@@ -442,6 +453,22 @@ func TestTimeTask_filterRowsByExprTestTimeTask_filterRowsByExpr(t *testing.T) {
 		},
 		{
 			cond: "fieldk_2323::float",
+			want: []int{},
+		},
+		{
+			cond: "fieldk_566 > 1564.0 or fieldb = 1",
+			want: []int{999},
+		},
+		{
+			cond: "fieldk_566 > 1564.0 and fieldb = 1",
+			want: []int{},
+		},
+		{
+			cond: "fieldk_566 > 1564.0 and fieldb = true",
+			want: []int{999},
+		},
+		{
+			cond: "fieldk_566 > 1564.0 and fieldb = false",
 			want: []int{},
 		},
 	} {
@@ -566,6 +593,8 @@ func TestTimeTask_IsMatchCond(t *testing.T) {
 		{"field_bool::boolean != false", true},
 		{"field_bool::boolean = false", false},
 		{"field_bool::boolean != true", false},
+		{"field_bool::boolean = 1", false},
+		{"field_bool::boolean = 1.0", false},
 
 		{"field_string::string = 'test_value'", true},
 		{"field_string::string != 'test_value2'", true},

@@ -1,3 +1,9 @@
+/*
+2025.07.07 change http to rpc
+op ParseStream method mem use
+Copyright 2025 Huawei Cloud Computing Technologies Co., Ltd.
+*/
+
 package promremotewrite
 
 import (
@@ -22,7 +28,9 @@ var maxInsertRequestSize = flagutil.NewBytes("maxInsertRequestSize", 32*1024*102
 // callback shouldn't hold tss after returning.
 func ParseStream(r io.Reader, callback func(tss []prompb.TimeSeries) error) error {
 	ctx := getPushCtx(r)
-	defer putPushCtx(ctx)
+	defer func() {
+		putPushCtx(ctx)
+	}()
 	if err := ctx.Read(); err != nil {
 		return err
 	}
@@ -40,6 +48,9 @@ func ParseStream(r io.Reader, callback func(tss []prompb.TimeSeries) error) erro
 	if len(bb.B) > maxInsertRequestSize.N {
 		return fmt.Errorf("too big unpacked request; mustn't exceed `-maxInsertRequestSize=%d` bytes; got %d bytes", maxInsertRequestSize.N, len(bb.B))
 	}
+	putPushCtx(ctx)
+	ctx = nil
+
 	wr := getWriteRequest()
 	defer putWriteRequest(wr)
 	if err := wr.Unmarshal(bb.B); err != nil {
@@ -113,6 +124,9 @@ func getPushCtx(r io.Reader) *pushCtx {
 }
 
 func putPushCtx(ctx *pushCtx) {
+	if ctx == nil {
+		return
+	}
 	ctx.reset()
 	select {
 	case pushCtxPoolCh <- ctx:

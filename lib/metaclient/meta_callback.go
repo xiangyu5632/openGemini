@@ -93,6 +93,9 @@ func (c *CreateNodeCallback) Handle(data interface{}) error {
 	if !ok {
 		return errors.New("data is not a CreateNodeResponse")
 	}
+	if msg.Err != "" {
+		return errors.New(msg.Err)
+	}
 	if err = c.NodeStartInfo.UnMarshalBinary(msg.Data); err != nil {
 		return err
 	}
@@ -113,6 +116,9 @@ func (c *CreateSqlNodeCallback) Handle(data interface{}) error {
 	msg, ok := metaMsg.Data().(*message.CreateSqlNodeResponse)
 	if !ok {
 		return errors.New("data is not a CreateSqlNodeResponse")
+	}
+	if msg.Err != "" {
+		return errors.New(msg.Err)
 	}
 	if err = c.NodeStartInfo.UnMarshalBinary(msg.Data); err != nil {
 		return err
@@ -443,7 +449,7 @@ func (c *VerifyDataNodeStatusCallback) Handle(data interface{}) error {
 		return fmt.Errorf("data is not a VerifyDataNodeStatusResponse, got type %T", metaMsg.Data())
 	}
 	if msg.Err != "" {
-		return fmt.Errorf("get verify datanode status callback error: %s", msg.Err)
+		return errno.NewError(msg.ErrCode, msg.Err)
 	}
 	return nil
 }

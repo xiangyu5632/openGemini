@@ -47,6 +47,10 @@ func (fr *FragmentRange) Less(other *FragmentRange) (bool, error) {
 	return fr.Start < other.Start && fr.End <= other.End, nil
 }
 
+func (fr *FragmentRange) NumberOfSegments() int {
+	return int(fr.End - fr.Start)
+}
+
 type FragmentRanges []*FragmentRange
 
 func (frs FragmentRanges) Empty() bool {

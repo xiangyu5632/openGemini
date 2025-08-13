@@ -114,6 +114,18 @@ func (is *indexSearch) getTSIDBySeriesKey(indexkey []byte) (uint64, error) {
 	return 0, io.EOF
 }
 
+func (is *indexSearch) getAllTSID() (*uint64set.Set, error) {
+	tsidSet := &uint64set.Set{}
+	ts := &is.ts
+	kb := &is.kb
+	ts.Seek(kb.B)
+	for ts.NextItem() {
+		tsidSet.Add(encoding.UnmarshalUint64(ts.Item))
+	}
+
+	return tsidSet, ts.Error()
+}
+
 func (is *indexSearch) getPidByPkey(key []byte) (uint64, error) {
 	ts := &is.ts
 	kb := &is.kb
@@ -1225,7 +1237,7 @@ func (is *indexSearch) searchTSIDs(name []byte, expr influxql.Expr, tr TimeRange
 		return nil, err
 	}
 
-	deleted := is.idx.getDeletedTSIDs()
+	deleted := is.idx.GetDeletedTSIDs()
 	tsids.Subtract(deleted)
 
 	return tsids.AppendTo(nil), nil
@@ -1448,6 +1460,7 @@ func (is *indexSearch) updateTSIDsForPrefix(prefix []byte, tsids *uint64set.Set,
 	if err := ts.Error(); err != nil {
 		return fmt.Errorf("error when searching for all tsids by prefix %q: %w", prefix, err)
 	}
+	tsids.Subtract(is.deleted)
 	return nil
 }
 
@@ -1519,7 +1532,7 @@ func (is *indexSearch) searchTagValuesBySingleKey(name, tagKey []byte, eligibleT
 	kb := &is.kb
 	mp := &is.mp
 	mp.Reset()
-	deletedTSIDs := is.idx.getDeletedTSIDs()
+	deletedTSIDs := is.idx.GetDeletedTSIDs()
 	tagValueMap := make(map[string]struct{})
 
 	compositeKey := kbPool.Get()

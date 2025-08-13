@@ -341,9 +341,7 @@ func TestCreateTextIndexReader(t *testing.T) {
 /*
 func TestTextIndexReader(t *testing.T) {
 	tmpDir := t.TempDir()
-	//defer fileops.RemoveAll(tmpDir)
-	//os.Mkdir(tmpDir+"/logmst", os.ModeDir)
-	os.Mkdir(tmpDir+"/logmst", 0640)
+	os.Mkdir(tmpDir+"/logmst", 0777)
 
 	field := "content"
 	tokens := " /?';.<>{}[],"

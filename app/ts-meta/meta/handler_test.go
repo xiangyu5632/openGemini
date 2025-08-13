@@ -21,11 +21,15 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/agiledragon/gomonkey/v2"
+	recover2 "github.com/openGemini/openGemini/app/ts-recover/recover"
+	"github.com/openGemini/openGemini/engine"
+	"github.com/openGemini/openGemini/lib/backup"
 	"github.com/openGemini/openGemini/lib/config"
 	"github.com/openGemini/openGemini/lib/errno"
 	"github.com/openGemini/openGemini/lib/logger"
@@ -86,6 +90,43 @@ func TestTestDebugVars(t *testing.T) {
 	if !strings.Contains(string(body), "metaRaft") {
 		t.Fatalf("invalid response data. exp get performance")
 	}
+}
+
+func TestRecoverDatabase(t *testing.T) {
+	go mockHTTPServer(false, "127.0.0.1:8901", t)
+
+	time.Sleep(1 * time.Second)
+	fullBackupPath := "/tmp/openGemini/backup_dir/backup"
+	incBackupPath := "/tmp/openGemini/backup_dir/backup_inc"
+
+	recoverConfig := &recover2.RecoverConfig{
+		RecoverMode:        "2",
+		FullBackupDataPath: fullBackupPath,
+		IncBackupDataPath:  incBackupPath,
+		Host:               "127.0.0.1",
+		Port:               "8091",
+	}
+	tsRecover := &config.TsRecover{
+		Data: config.Store{
+			DataDir: "/tmp/openGemini/backup_dir/data",
+			MetaDir: "/tmp/openGemini/backup_dir/meta",
+		},
+	}
+
+	result := engine.BackupResult{Result: "success", DataBases: map[string]struct{}{"prom": {}}}
+	b, _ := json.Marshal(result)
+	_ = backup.WriteBackupLogFile(b, fullBackupPath, backup.ResultLog)
+	_ = backup.WriteBackupLogFile(b, incBackupPath, backup.ResultLog)
+
+	t.Run("1", func(t *testing.T) {
+		err := recover2.BackupRecover(recoverConfig, tsRecover)
+		if err == nil {
+			t.Fail()
+		}
+	})
+
+	os.RemoveAll(fullBackupPath)
+	os.RemoveAll(incBackupPath)
 }
 
 func TestHttpHandler_ServeHTTP(t *testing.T) {
@@ -155,6 +196,9 @@ func (w *MockResponseWriter) WriteHeader(statusCode int) {
 type MockIStore struct {
 }
 
+func (s *MockIStore) MeteRecover() {
+
+}
 func (s *MockIStore) leaderHTTP() string {
 	return ""
 }

@@ -17,11 +17,13 @@ package meta
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"time"
 
 	"github.com/openGemini/openGemini/lib/backup"
+	"github.com/openGemini/openGemini/lib/fileops"
 )
 
 type Backup struct {
@@ -29,6 +31,8 @@ type Backup struct {
 	IsRemote   bool
 	IsNode     bool
 	BackupPath string
+	Databases  []string
+	store      MetaStoreInterface
 }
 
 func (s *Backup) RunBackupMeta() error {
@@ -38,18 +42,25 @@ func (s *Backup) RunBackupMeta() error {
 	}
 	if !globalService.store.IsLeader() {
 		return nil
-
 	}
+
+	var err error
 	// snapshot
-	if err := globalService.store.raft.UserSnapshot(); err != nil {
+	if err = globalService.store.raft.UserSnapshot(); err != nil {
 		return err
 	}
-
 	dstPath := filepath.Join(s.BackupPath, backup.MetaBackupDir)
-	if err := backup.FolderCopy(globalService.store.path, dstPath); err != nil {
+
+	if len(s.Databases) == 0 {
+		// if we need to backup all database,just back up all meta files
+		err = s.BackupMetaFile(dstPath)
+	} else {
+		// if backed up some databases, the meta info needs to be recorded, and the database can be restored through the meta info.
+		err = s.BackupMetaInfo(dstPath)
+	}
+	if err != nil {
 		return err
 	}
-
 	metaIds := make([]string, len(globalService.store.cacheData.MetaNodes))
 	for i, n := range globalService.store.cacheData.MetaNodes {
 		metaIds[i] = strconv.FormatUint(n.ID, 10)
@@ -67,5 +78,26 @@ func (s *Backup) RunBackupMeta() error {
 		return err
 	}
 
-	return nil
+	return err
+}
+
+func (s *Backup) BackupMetaFile(dstPath string) error {
+	return backup.FolderCopy(globalService.store.path, dstPath)
+}
+
+func (s *Backup) BackupMetaInfo(dstPath string) error {
+	var err error
+	if err = fileops.MkdirAll(dstPath, 0700); err != nil {
+		return err
+	}
+
+	info, err := s.store.GetMarshalData([]string{})
+	if err != nil {
+		return err
+	}
+
+	fName := filepath.Join(dstPath, backup.MetaInfo)
+	err = os.WriteFile(fName, info, 0640)
+
+	return err
 }

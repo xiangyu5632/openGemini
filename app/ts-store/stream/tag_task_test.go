@@ -315,6 +315,7 @@ func Test_ResetReplayVar(t *testing.T) {
 			id:     1,
 		},
 	}
+	task.dataPath = t.TempDir()
 	p := path.Join(task.dataPath, "data", task.des.Database, strconv.Itoa(0), task.des.RetentionPolicy)
 
 	st := &flushStatus{Timestamp: time.Now().UnixNano()}
@@ -324,9 +325,7 @@ func Test_ResetReplayVar(t *testing.T) {
 	}
 	if err := os.MkdirAll(p, 0750); err == nil {
 		if _, err := os.Stat(p); err == nil {
-			if err := os.WriteFile(path.Join(p, strconv.FormatUint(task.id, 10)), b, 0640); err != nil {
-				t.Fatal()
-			}
+			os.WriteFile(path.Join(p, strconv.FormatUint(task.id, 10)), b, 0640)
 		}
 	}
 	task.shardIds = make(map[uint32][]*uint64)

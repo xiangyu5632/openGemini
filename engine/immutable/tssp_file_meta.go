@@ -79,7 +79,7 @@ func (s *Segment) setSize(size uint32) {
 	s.size = size
 }
 
-func (s *Segment) offsetSize() (int64, uint32) {
+func (s *Segment) OffsetSize() (int64, uint32) {
 	return s.offset, s.size
 }
 
@@ -153,8 +153,8 @@ func (m *ColumnMeta) GetPreAgg() []byte {
 	return m.preAgg
 }
 
-func (m *ColumnMeta) GetSegment(i int) (int64, uint32) {
-	return m.entries[i].offset, m.entries[i].size
+func (m *ColumnMeta) GetSegment(i int) Segment {
+	return m.entries[i]
 }
 
 func (m *ColumnMeta) Equal(name string, ty int) bool {
@@ -393,6 +393,7 @@ func NewChunkMeta(sid uint64, minT, maxT int64, count int) *ChunkMeta {
 		sid:       sid,
 		timeRange: []SegmentRange{SegmentRange{minT, maxT}},
 		colMeta:   []ColumnMeta{ColumnMeta{preAgg: b.intBuilder.marshal(dst)}},
+		segCount:  uint32(count),
 	}
 	return cm
 }

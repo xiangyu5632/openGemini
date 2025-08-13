@@ -31,6 +31,7 @@ const (
 	FullBackupLog = "full_backup_log.json"
 	IncBackupLog  = "inc_backup_log.json"
 	MetaBackupLog = "meta_backup_log.json"
+	MetaInfo      = "meta_info.json"
 	BackupLogPath = "/backup_log"
 	ResultLog     = "result"
 
@@ -39,6 +40,7 @@ const (
 	IsNode           = "isNode"
 	BackupPath       = "backupPath"
 	OnlyBackupMaster = "onlyBackupMaster"
+	DataBases        = "dbs"
 )
 
 func FileCopy(src, dst string) error {

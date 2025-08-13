@@ -27,7 +27,8 @@ import (
 )
 
 func TestProcessorCodec(t *testing.T) {
-	cond, err := influxql.ParseExpr("a=b AND c=1")
+	cond, err := influxql.ParseExpr("a=b AND c=1 AND 1 IN (1,2)")
+	valCond, err := influxql.ParseExpr("d>1 AND e<2")
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -46,33 +47,34 @@ func TestProcessorCodec(t *testing.T) {
 				Type: influxql.Integer,
 			},
 		},
-		FieldAux:    nil,
-		TagAux:      nil,
-		Sources:     nil,
-		Interval:    hybridqp.Interval{Duration: 5, Offset: 100},
-		Dimensions:  []string{"id", "tid"},
-		GroupBy:     map[string]struct{}{"id": {}, "tid": {}},
-		Location:    time.FixedZone("Asia/Shanghai", 0),
-		Fill:        1,
-		FillValue:   3.3,
-		Condition:   cond,
-		StartTime:   time.Now().Unix() - 3600*10,
-		EndTime:     time.Now().Unix(),
-		Ascending:   false,
-		Limit:       10,
-		Offset:      10,
-		SLimit:      10,
-		SOffset:     10,
-		StripName:   false,
-		Dedupe:      false,
-		Ordered:     false,
-		MaxSeriesN:  0,
-		InterruptCh: nil,
-		Authorizer:  nil,
-		Parallel:    false,
-		ChunkSize:   7,
-		MaxParallel: 0,
-		QueryId:     0,
+		FieldAux:       nil,
+		TagAux:         nil,
+		Sources:        nil,
+		Interval:       hybridqp.Interval{Duration: 5, Offset: 100},
+		Dimensions:     []string{"id", "tid"},
+		GroupBy:        map[string]struct{}{"id": {}, "tid": {}},
+		Location:       time.FixedZone("Asia/Shanghai", 0),
+		Fill:           1,
+		FillValue:      3.3,
+		Condition:      cond,
+		ValueCondition: valCond,
+		StartTime:      time.Now().Unix() - 3600*10,
+		EndTime:        time.Now().Unix(),
+		Ascending:      false,
+		Limit:          10,
+		Offset:         10,
+		SLimit:         10,
+		SOffset:        10,
+		StripName:      false,
+		Dedupe:         false,
+		Ordered:        false,
+		MaxSeriesN:     0,
+		InterruptCh:    nil,
+		Authorizer:     nil,
+		Parallel:       false,
+		ChunkSize:      7,
+		MaxParallel:    0,
+		QueryId:        0,
 
 		HintType: hybridqp.ExactStatisticQuery,
 	}
@@ -123,6 +125,10 @@ func TestProcessorCodec(t *testing.T) {
 
 	if opt.Condition.String() != other.Condition.String() {
 		t.Fatalf("failed to marshal Condition. exp: %s; got: %s", opt.Condition, other.Condition)
+	}
+
+	if opt.ValueCondition.String() != other.ValueCondition.String() {
+		t.Fatalf("failed to marshal ValueCondition. exp: %s; got: %s", opt.ValueCondition, other.ValueCondition)
 	}
 
 	if opt.ChunkSize != other.ChunkSize {

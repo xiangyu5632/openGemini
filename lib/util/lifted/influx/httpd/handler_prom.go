@@ -131,7 +131,7 @@ func (h *Handler) servePromWriteBase(w http.ResponseWriter, r *http.Request, use
 
 	db, rp := getDbRpByProm(h, r)
 	if _, err := h.MetaClient.Database(db); err != nil {
-		h.httpError(w, fmt.Sprintf(err.Error()), http.StatusNotFound)
+		h.httpError(w, fmt.Sprintf("%s", err.Error()), http.StatusNotFound)
 		h.Logger.Error("servePromWriteBase error", zap.Error(err))
 		return
 	}
@@ -1178,6 +1178,11 @@ func (h *Handler) servePromQueryMetaDataBase(w http.ResponseWriter, r *http.Requ
 	receiver := &promql2influxql.Receiver{}
 	res, err := receiver.InfluxRowsToPromMetaData(stmtID2Result[0])
 	if err != nil {
+		if IsErrWithEmptyResp(err) {
+			n, _ := rw.WritePromResponse(&resp)
+			handlerStat.QueryRequestBytesTransmitted.Add(int64(n))
+			return
+		}
 		respondError(w, &apiError{errorBadData, err})
 		return
 	} else {
@@ -1317,8 +1322,10 @@ func CreatePromEmptyResp(expr parser.Expr, cmd *promql2influxql.PromCommand) *pr
 	}
 }
 
+// IsErrWithEmptyResp used to ignore some internal errors and return an empty result,
+// which is consistent with the prom.
 func IsErrWithEmptyResp(err error) bool {
-	return strings.Contains(err.Error(), "invalid measurement")
+	return strings.Contains(err.Error(), "invalid measurement") || errno.Equal(err, errno.ErrMeasurementNotFound)
 }
 
 func AlignWithStep(command promql2influxql.PromCommand) *promql2influxql.PromCommand {

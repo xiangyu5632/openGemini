@@ -15,7 +15,6 @@
 package meta
 
 import (
-	"fmt"
 	"os"
 	"testing"
 
@@ -31,11 +30,9 @@ import (
 func TestRunBackup(t *testing.T) {
 	conf := config.NewMeta()
 	_ = NewService(conf, nil, nil)
-	diskDir := t.TempDir()
-	CreateMeteFile(diskDir)
+	CreateMeteFile()
 
 	t.Run("1", func(t *testing.T) {
-		BackupPath := t.TempDir()
 		s := &Store{
 			raft: &MockRaftForSG{isLeader: true},
 			data: &meta.Data{
@@ -43,7 +40,7 @@ func TestRunBackup(t *testing.T) {
 					meta.DataNode{NodeInfo: meta.NodeInfo{ID: 1}},
 				},
 			},
-			path:   fmt.Sprintf("%s/openGemini/backup_dir/data/meta/", diskDir),
+			path:   "tmp/openGemini/backup_dir/data/meta",
 			Logger: logger.NewLogger(errno.ModuleMeta).With(zap.String("service", "meta")),
 			cacheData: &meta.Data{
 				MetaNodes: []meta.NodeInfo{meta.NodeInfo{ID: 1}, meta.NodeInfo{ID: 2}},
@@ -52,23 +49,20 @@ func TestRunBackup(t *testing.T) {
 		globalService.store = s
 
 		b := &Backup{
-			IsNode:     true,
-			IsRemote:   false,
-			BackupPath: BackupPath,
+			IsNode:   true,
+			IsRemote: false,
 		}
 		err := b.RunBackupMeta()
 		assert.NoError(t, err)
 	})
 
 	t.Run("2", func(t *testing.T) {
-		BackupPath := t.TempDir()
 		s := &Store{
 			raft: &MockRaftForSG{isLeader: false},
 		}
 		b := &Backup{
-			IsNode:     true,
-			IsRemote:   false,
-			BackupPath: BackupPath,
+			IsNode:   true,
+			IsRemote: false,
 		}
 		globalService.store = s
 		err := b.RunBackupMeta()
@@ -76,14 +70,12 @@ func TestRunBackup(t *testing.T) {
 	})
 
 	t.Run("3", func(t *testing.T) {
-		BackupPath := t.TempDir()
 		s := &Store{
 			raft: &MockRaftForSG{isLeader: true},
 		}
 		b := &Backup{
-			IsNode:     true,
-			IsRemote:   false,
-			BackupPath: BackupPath,
+			IsNode:   true,
+			IsRemote: false,
 		}
 		globalService.store = s
 		err := b.RunBackupMeta()
@@ -91,20 +83,32 @@ func TestRunBackup(t *testing.T) {
 			t.Fatal()
 		}
 	})
-	os.RemoveAll(fmt.Sprintf("%s/openGemini/backup_dir", diskDir))
+
+	t.Run("4", func(t *testing.T) {
+		s := &Store{
+			raft: &MockRaftForSG{isLeader: true},
+			cacheData: &meta.Data{
+				MetaNodes: []meta.NodeInfo{{ID: 0}},
+			},
+		}
+		b := &Backup{
+			IsNode:    true,
+			IsRemote:  false,
+			store:     &MockRPCStore{},
+			Databases: []string{"prom"},
+		}
+		globalService.store = s
+		err := b.RunBackupMeta()
+		if err != nil {
+			t.Fatal()
+		}
+	})
+	os.RemoveAll("/tmp/openGemini/backup_dir")
 }
 
-func CreateMeteFile(diskDir string) {
-	dir := fmt.Sprintf("%s/openGemini/backup_dir/data/meta/", diskDir)
-	mkerr := os.MkdirAll(dir, 0750)
-	if mkerr != nil {
-		fmt.Println(mkerr.Error())
-	}
-	filepath := fmt.Sprintf("%s/meta.json", dir)
-	fd, err := fileops.OpenFile(filepath, os.O_CREATE|os.O_WRONLY, 0750)
-	if err != nil {
-		fmt.Println(err.Error())
-	}
+func CreateMeteFile() {
+	_ = os.MkdirAll("/tmp/openGemini/backup_dir/data/meta/", 0700)
+	fd, _ := fileops.OpenFile("/tmp/openGemini/backup_dir/data/meta/meta.json", os.O_CREATE|os.O_WRONLY, 0640)
 
 	fd.Write([]byte("123"))
 

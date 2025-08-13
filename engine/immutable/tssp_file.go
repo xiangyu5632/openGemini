@@ -402,7 +402,7 @@ func (r *tsspFileReader) readSegmentRecord(cm *ChunkMeta, segment int, dst *reco
 		seg := cMeta.entries[segment]
 
 		var data []byte
-		segOff, segSize := seg.offsetSize()
+		segOff, segSize := seg.OffsetSize()
 		if len(chunkData) > 0 {
 			data = columnData(chunkData, cm.offset, segOff, segSize)
 		} else {
@@ -443,7 +443,7 @@ func (r *tsspFileReader) decodeTimeColumn(cm *ChunkMeta, segment int, chunkData 
 	var cachePage *readcache.CachePage
 
 	timeSeg := cm.timeMeta().entries[segment]
-	segOff, segSize := timeSeg.offsetSize()
+	segOff, segSize := timeSeg.OffsetSize()
 	if len(chunkData) > 0 {
 		tmData = columnData(chunkData, cm.offset, segOff, segSize)
 	} else {

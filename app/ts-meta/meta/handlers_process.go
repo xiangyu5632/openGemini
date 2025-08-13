@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -262,7 +263,11 @@ func createDatabase(cmd *proto2.Command) error {
 	if err != nil {
 		return err
 	}
+	return assignDbpt(dbPts)
+}
 
+func assignDbpt(dbPts []*meta.DbPtInfo) error {
+	var err error
 	once := sync.Once{}
 	wg := sync.WaitGroup{}
 	wg.Add(len(dbPts))
@@ -455,8 +460,16 @@ func (h *VerifyDataNodeStatus) Process() (transport.Codec, error) {
 	rsp := &message.VerifyDataNodeStatusResponse{}
 	err := h.store.verifyDataNodeStatus(h.req.NodeID)
 	if err != nil {
-		rsp.Err = err.Error()
-		return rsp, nil
+		return DoHandleRsp(rsp, err)
+	}
+	return rsp, nil
+}
+func DoHandleRsp(rsp *message.VerifyDataNodeStatusResponse, err error) (transport.Codec, error) {
+	rsp.Err = err.Error()
+	switch stdErr := err.(type) {
+	case *errno.Error:
+		rsp.ErrCode = stdErr.Errno()
+	default:
 	}
 	return rsp, nil
 }
@@ -519,11 +532,14 @@ func handleBackup(h *SendSysCtrlToMeta) error {
 	}
 	isRemote := h.req.Param[backup.IsRemote] == "true"
 	isNode := h.req.Param[backup.IsNode] == "true"
+	dbs := strings.Split(h.req.Param[backup.DataBases], ",")
 
 	b := &Backup{
 		IsRemote:   isRemote,
 		IsNode:     isNode,
 		BackupPath: backupPath,
+		Databases:  dbs,
+		store:      h.store,
 	}
 	if err := b.RunBackupMeta(); err != nil {
 		logger.GetLogger().Error("run backup error", zap.Error(err))

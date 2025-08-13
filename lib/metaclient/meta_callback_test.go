@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/openGemini/openGemini/app/ts-meta/meta/message"
+	"github.com/openGemini/openGemini/lib/errno"
 	"github.com/openGemini/openGemini/lib/metaclient"
 	"github.com/stretchr/testify/assert"
 )
@@ -144,9 +145,10 @@ func TestVerifyDataNodeStatusCallbackResponse(t *testing.T) {
 	assert.EqualError(t, err, "data is not a VerifyDataNodeStatusResponse, got type *message.PingResponse")
 
 	// wrong message
-	badMsg2 := message.NewMetaMessage(message.VerifyDataNodeStatusResponseMessage, &message.VerifyDataNodeStatusResponse{Err: "mock error"})
+	badMsg2 := message.NewMetaMessage(message.VerifyDataNodeStatusResponseMessage, &message.VerifyDataNodeStatusResponse{Err: "mock error", ErrCode: errno.PtNotFound})
+	newError := errno.NewError(errno.PtNotFound, "mock error")
 	err = callback.Handle(badMsg2)
-	assert.EqualError(t, err, "get verify datanode status callback error: mock error")
+	assert.Error(t, err, newError)
 }
 
 func TestSendSysCtrlToMetaCallbackResponse(t *testing.T) {

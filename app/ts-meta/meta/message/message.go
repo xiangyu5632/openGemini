@@ -263,7 +263,8 @@ type VerifyDataNodeStatusRequest struct {
 }
 
 type VerifyDataNodeStatusResponse struct {
-	Err string
+	Err     string
+	ErrCode errno.Errno
 }
 
 type SendSysCtrlToMetaRequest struct {

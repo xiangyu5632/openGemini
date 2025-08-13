@@ -37,7 +37,6 @@ import (
 	"github.com/openGemini/openGemini/lib/record"
 	"github.com/openGemini/openGemini/lib/util"
 	"github.com/openGemini/openGemini/lib/util/lifted/influx/influxql"
-	"github.com/openGemini/openGemini/lib/util/lifted/influx/meta"
 	"github.com/openGemini/openGemini/lib/util/lifted/vm/protoparser/influx"
 	"github.com/smartystreets/goconvey/convey"
 	"github.com/stretchr/testify/require"
@@ -377,29 +376,16 @@ func buildColumnStoreTsspFile(t *testing.T, recRows int) string {
 
 	store := NewTableStore(testCompDir, &lockPath, &tier, true, conf)
 	defer store.Close()
+	store.SetDbRp("db0", "rp0")
 	store.SetImmTableType(config.COLUMNSTORE)
 	store.CompactionEnable()
 	primaryKey := []string{"primaryKey_float1", "primaryKey_string1", "primaryKey_string2", "field3_bool", "field2_int"}
 	sortKey := []string{"primaryKey_float1", "primaryKey_string1", "primaryKey_string2", "sortKey_int1", "field3_bool", "field2_int"}
 	sort := []string{"primaryKey_float1", "primaryKey_string1", "primaryKey_string2", "time", "sortKey_int1", "field3_bool", "field2_int"}
-	schema := make(meta.CleanSchema)
-	for i := range primaryKey {
-		for j := range schemaForColumnStore {
-			if primaryKey[i] == schemaForColumnStore[j].Name {
-				schema[primaryKey[i]] = meta.SchemaVal{Typ: int8(schemaForColumnStore[j].Type)}
-			}
-		}
-	}
-	mstinfo := meta.MeasurementInfo{
-		Name:       "mst",
-		EngineType: config.COLUMNSTORE,
-		ColStoreInfo: &meta.ColStoreInfo{
-			PrimaryKey: primaryKey,
-			SortKey:    sortKey,
-		},
-		Schema: &schema,
-	}
-	store.ImmTable.SetMstInfo("mst", &mstinfo)
+
+	defer clearMstInfo()
+	_, pkSchema, ok := initColumnStoreMstInfo(defaultColumnStoreMstInfo(primaryKey, sortKey, 0))
+	require.True(t, ok)
 
 	sortKeyMap := genSortedKeyMap(sort)
 	write := func(ids uint64, data map[uint64]*record.Record, msb *MsBuilder, merge *record.Record,
@@ -413,7 +399,7 @@ func buildColumnStoreTsspFile(t *testing.T, recRows int) string {
 			dataFilePath := msb.FileName.String()
 			indexFilePath := path.Join(msb.Path, msb.msName, colstore.AppendPKIndexSuffix(dataFilePath))
 			fixRowsPerSegment := GenFixRowsPerSegment(rec, conf.maxRowsPerSegment)
-			if err = msb.writePrimaryIndex(rec, pkSchema, indexFilePath, *msb.lock, colstore.DefaultTCLocation, fixRowsPerSegment, util.DefaultMaxRowsPerSegment4ColStore); err != nil {
+			if err = msb.WritePrimaryIndex(rec, pkSchema, indexFilePath, *msb.lock, colstore.DefaultTCLocation, fixRowsPerSegment, util.DefaultMaxRowsPerSegment4ColStore); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -433,15 +419,7 @@ func buildColumnStoreTsspFile(t *testing.T, recRows int) string {
 	oldRec.ReserveColumnRows(recRows * filesN)
 
 	recs := make([]*record.Record, 0, filesN)
-	pk := store.ImmTable.(*csImmTableImpl).mstsInfo["mst"].ColStoreInfo.PrimaryKey
-	pkSchema := make([]record.Field, len(pk))
-	for i := range pk {
-		v, _ := store.ImmTable.(*csImmTableImpl).mstsInfo["mst"].Schema.GetTyp(pk[i])
-		pkSchema[i] = record.Field{
-			Type: int(v),
-			Name: pk[i],
-		}
-	}
+
 	needMerge := false
 	for i := 0; i < filesN; i++ {
 		ids, data := genTestDataForColumnStore(idMinMax.min, 1, recRows, &startValue, &tm)
@@ -457,13 +435,7 @@ func buildColumnStoreTsspFile(t *testing.T, recRows int) string {
 		for _, v := range data {
 			recs = append(recs, v)
 		}
-		if msb.GetPKInfoNum() != 0 {
-			for i, file := range msb.Files {
-				dataFilePath := file.Path()
-				indexFilePath := colstore.AppendPKIndexSuffix(RemoveTsspSuffix(dataFilePath))
-				store.AddPKFile(msb.Name(), indexFilePath, msb.GetPKRecord(i), msb.GetPKMark(i), colstore.DefaultTCLocation)
-			}
-		}
+		setPKInfo(msb)
 	}
 
 	tmMinMax.max = uint64(tm.UnixNano() - timeInterval.Nanoseconds())

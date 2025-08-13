@@ -20,6 +20,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/openGemini/openGemini/engine/immutable/colstore"
 	"github.com/openGemini/openGemini/lib/config"
 	"github.com/openGemini/openGemini/lib/cpu"
 	"github.com/openGemini/openGemini/lib/fileops"
@@ -48,6 +49,11 @@ const (
 
 	defaultCap = 64
 )
+
+func RenameMergeFiles(srcName TSSPFileName, addSeq uint64) string {
+	srcName.AddSeq(addSeq)
+	return srcName.String() + tsspFileSuffix
+}
 
 func RemoveTsspSuffix(dataPath string) string {
 	return dataPath[:len(dataPath)-tsspFileSuffixLen]
@@ -138,6 +144,9 @@ type TSSPFile interface {
 	RenameOnObs(obsName string, tmp bool, opt *obs.ObsOptions) error
 
 	ChunkMetaCompressMode() uint8
+
+	SetPkInfo(pkInfo *colstore.PKInfo)
+	GetPkInfo() *colstore.PKInfo
 }
 
 type TSSPFiles struct {
@@ -273,6 +282,19 @@ func (f *TSSPFiles) Files() []TSSPFile {
 	return f.files
 }
 
+func (f *TSSPFiles) GetFilesAndUnref() []TSSPFile {
+	allFiles := make([]TSSPFile, 0)
+	if f == nil {
+		return allFiles
+	}
+	f.RLock()
+	defer f.RUnlock()
+	allFiles = append(allFiles, f.files...)
+	UnrefFilesReader(f.Files()...)
+	UnrefFiles(f.Files()...)
+	return allFiles
+}
+
 func (f *TSSPFiles) deleteFile(tbl TSSPFile) {
 	idx := f.fileIndex(tbl)
 	if idx < 0 || idx >= f.Len() {
@@ -347,6 +369,7 @@ type tsspFile struct {
 	flag uint32 // flag > 0 indicates that the files is need close.
 	lock *string
 
+	pkInfo *colstore.PKInfo
 	reader FileReader
 }
 
@@ -356,6 +379,7 @@ func OpenTSSPFile(name string, lockPath *string, isOrder bool) (TSSPFile, error)
 		return nil, err
 	}
 	fileName.SetOrder(isOrder)
+	fileName.SetLock(lockPath)
 
 	fr, err := NewTSSPFileReader(name, lockPath)
 	if err != nil || fr == nil {
@@ -635,6 +659,20 @@ func (f *tsspFile) Rename(newName string) error {
 	if f.stopped() {
 		return errFileClosed
 	}
+
+	if f.pkInfo != nil {
+		lock := fileops.FileLockOption(*f.lock)
+		oldPKName := BuildPKFilePathFromTSSP(f.reader.FileName())
+		newPKName := BuildPKFilePathFromTSSP(newName)
+		if IsTempleFile(f.reader.FileName()) {
+			oldPKName += GetTmpFileSuffix()
+		}
+		err := fileops.RenameFile(oldPKName, newPKName, lock)
+		if err != nil {
+			return err
+		}
+	}
+
 	return f.reader.Rename(newName)
 }
 
@@ -654,8 +692,15 @@ func (f *tsspFile) Remove() error {
 
 		name := f.reader.FileName()
 		log.Debug("remove file", zap.String("file", name))
-		_ = f.reader.Close()
+
 		lock := fileops.FileLockOption(*f.lock)
+		if f.pkInfo != nil {
+			util.MustRun(func() error {
+				return fileops.Remove(BuildPKFilePathFromTSSP(name), lock)
+			})
+		}
+
+		util.MustClose(f.reader)
 		err := fileops.Remove(name, lock)
 		if err != nil && !os.IsNotExist(err) {
 			err = errRemoveFail(name, err)
@@ -812,6 +857,14 @@ func (f *tsspFile) RenameOnObs(oldName string, tmp bool, obsOpt *obs.ObsOptions)
 	return nil
 }
 
+func (f *tsspFile) SetPkInfo(pkInfo *colstore.PKInfo) {
+	f.pkInfo = pkInfo
+}
+
+func (f *tsspFile) GetPkInfo() *colstore.PKInfo {
+	return f.pkInfo
+}
+
 func (f *tsspFile) ChunkMetaCompressMode() uint8 {
 	return f.reader.ChunkMetaCompressMode()
 }
@@ -873,7 +926,6 @@ type FilesInfo struct {
 	dropping          *int64
 	compIts           FileIterators
 	oldFiles          []TSSPFile
-	oldIndexFiles     []string
 	oldFids           []string
 	maxColumns        int
 	maxChunkRows      int
